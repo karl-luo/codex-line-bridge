@@ -1,0 +1,22 @@
+{
+  "line_channel_access_token": "",
+  "line_channel_secret": "",
+  "webhook_bind_host": "127.0.0.1",
+  "webhook_port": 8080,
+  "webhook_path": "/line/webhook",
+  "media_path_prefix": "/line/media",
+  "public_base_url": "https://line-bridge.example.com",
+  "codex_workdir": ".",
+  "codex_model": "",
+  "session_mode": "hybrid",
+  "reply_timeout_sec": 600,
+  "queue_timeout_sec": 60,
+  "run_timeout_sec": 900,
+  "delivery_timeout_sec": 30,
+  "max_run_retries": 3,
+  "max_delivery_retries": 5,
+  "watch_interval_sec": 20,
+  "alarm_channel": "",
+  "discord_bot_token": "",
+  "line_dm_policy": "pairing"
+}

@@ -1,0 +1,11 @@
+__pycache__/
+*.pyc
+.DS_Store
+data/config.json
+data/line-allowFrom.json
+data/line-pairing.json
+data/line_bridge.sqlite3
+data/line_bridge.sqlite3-shm
+data/line_bridge.sqlite3-wal
+logs/
+runtime/
