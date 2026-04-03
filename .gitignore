@@ -3,7 +3,10 @@ __pycache__/
 .DS_Store
 data/config.json
 data/line-allowFrom.json
+data/line-allowGroups.json
 data/line-pairing.json
+data/line-group-pairing.json
+data/line-group-settings.json
 data/line_bridge.sqlite3
 data/line_bridge.sqlite3-shm
 data/line_bridge.sqlite3-wal

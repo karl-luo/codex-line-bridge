@@ -33,6 +33,9 @@ OPENCLAW_LINE_ALLOW_FROM_PATH = OPENCLAW_HOME / "credentials" / "line-allowFrom.
 OPENCLAW_LINE_PAIRING_PATH = OPENCLAW_HOME / "credentials" / "line-pairing.json"
 LOCAL_LINE_ALLOW_FROM_PATH = DATA_DIR / "line-allowFrom.json"
 LOCAL_LINE_PAIRING_PATH = DATA_DIR / "line-pairing.json"
+LOCAL_LINE_ALLOW_GROUPS_PATH = DATA_DIR / "line-allowGroups.json"
+LOCAL_LINE_GROUP_PAIRING_PATH = DATA_DIR / "line-group-pairing.json"
+LOCAL_LINE_GROUP_SETTINGS_PATH = DATA_DIR / "line-group-settings.json"
 
 
 MESSAGE_STATES = {
@@ -106,6 +109,8 @@ def default_config() -> dict[str, Any]:
         "line_channel_access_token": line.get("channelAccessToken", ""),
         "line_channel_secret": line.get("channelSecret", ""),
         "line_dm_policy": line.get("dmPolicy", "open"),
+        "line_group_policy": "pairing",
+        "line_group_require_mention_default": True,
         "discord_bot_token": discord_token,
         "webhook_bind_host": "127.0.0.1",
         "webhook_port": 8080,
@@ -113,6 +118,7 @@ def default_config() -> dict[str, Any]:
         "media_path_prefix": "/line/media",
         "public_base_url": "",
         "unauthorized_reply_text": "This LINE account is not approved yet. Your request has been recorded and is waiting for admin approval.",
+        "unauthorized_group_reply_text": "This LINE group is not approved yet. The group has been queued for admin approval.",
         "codex_workdir": DEFAULT_WORKDIR,
         "codex_model": "",
         "session_mode": "hybrid",
@@ -155,6 +161,12 @@ def ensure_line_auth_files() -> None:
     if not LOCAL_LINE_PAIRING_PATH.exists():
         source = read_json(OPENCLAW_LINE_PAIRING_PATH, {"version": 1, "requests": []})
         write_json(LOCAL_LINE_PAIRING_PATH, source)
+    if not LOCAL_LINE_ALLOW_GROUPS_PATH.exists():
+        write_json(LOCAL_LINE_ALLOW_GROUPS_PATH, {"version": 1, "allowGroups": []})
+    if not LOCAL_LINE_GROUP_PAIRING_PATH.exists():
+        write_json(LOCAL_LINE_GROUP_PAIRING_PATH, {"version": 1, "requests": []})
+    if not LOCAL_LINE_GROUP_SETTINGS_PATH.exists():
+        write_json(LOCAL_LINE_GROUP_SETTINGS_PATH, {"version": 1, "groups": {}})
 
 
 def load_line_allow_from() -> dict[str, Any]:
@@ -227,6 +239,108 @@ def reject_line_user(user_id: str) -> None:
     pairing = load_line_pairing()
     pairing["requests"] = [item for item in pairing.get("requests", []) if item.get("userId") != user_id]
     save_line_pairing(pairing)
+
+
+def load_line_allow_groups() -> dict[str, Any]:
+    ensure_line_auth_files()
+    raw = read_json(LOCAL_LINE_ALLOW_GROUPS_PATH, {"version": 1, "allowGroups": []})
+    raw.setdefault("version", 1)
+    raw.setdefault("allowGroups", [])
+    return raw
+
+
+def save_line_allow_groups(data: dict[str, Any]) -> None:
+    write_json(LOCAL_LINE_ALLOW_GROUPS_PATH, data)
+
+
+def load_line_group_pairing() -> dict[str, Any]:
+    ensure_line_auth_files()
+    raw = read_json(LOCAL_LINE_GROUP_PAIRING_PATH, {"version": 1, "requests": []})
+    raw.setdefault("version", 1)
+    raw.setdefault("requests", [])
+    return raw
+
+
+def save_line_group_pairing(data: dict[str, Any]) -> None:
+    write_json(LOCAL_LINE_GROUP_PAIRING_PATH, data)
+
+
+def is_line_group_allowed(chat_id: str | None) -> bool:
+    if not chat_id:
+        return False
+    data = load_line_allow_groups()
+    return chat_id in set(data.get("allowGroups", []))
+
+
+def queue_line_group_pairing_request(chat_type: str, chat_id: str, user_id: str | None, text_preview: str) -> dict[str, Any]:
+    data = load_line_group_pairing()
+    now = utcnow()
+    requests = data.get("requests", [])
+    for item in requests:
+        if item.get("chatId") == chat_id:
+            item["chatType"] = chat_type
+            item["lastSeenAt"] = now
+            item["lastUserId"] = user_id
+            item["lastTextPreview"] = text_preview[:500]
+            item["requestCount"] = int(item.get("requestCount", 1)) + 1
+            save_line_group_pairing(data)
+            return item
+    item = {
+        "chatType": chat_type,
+        "chatId": chat_id,
+        "firstSeenAt": now,
+        "lastSeenAt": now,
+        "lastUserId": user_id,
+        "lastTextPreview": text_preview[:500],
+        "requestCount": 1,
+    }
+    requests.append(item)
+    save_line_group_pairing(data)
+    return item
+
+
+def approve_line_group(chat_id: str) -> None:
+    allow = load_line_allow_groups()
+    if chat_id not in allow["allowGroups"]:
+        allow["allowGroups"].append(chat_id)
+        save_line_allow_groups(allow)
+    pairing = load_line_group_pairing()
+    pairing["requests"] = [item for item in pairing.get("requests", []) if item.get("chatId") != chat_id]
+    save_line_group_pairing(pairing)
+
+
+def reject_line_group(chat_id: str) -> None:
+    pairing = load_line_group_pairing()
+    pairing["requests"] = [item for item in pairing.get("requests", []) if item.get("chatId") != chat_id]
+    save_line_group_pairing(pairing)
+
+
+def load_line_group_settings() -> dict[str, Any]:
+    ensure_line_auth_files()
+    raw = read_json(LOCAL_LINE_GROUP_SETTINGS_PATH, {"version": 1, "groups": {}})
+    raw.setdefault("version", 1)
+    raw.setdefault("groups", {})
+    return raw
+
+
+def save_line_group_settings(data: dict[str, Any]) -> None:
+    write_json(LOCAL_LINE_GROUP_SETTINGS_PATH, data)
+
+
+def get_line_group_require_mention(chat_id: str, default_value: bool = True) -> bool:
+    data = load_line_group_settings()
+    entry = data.get("groups", {}).get(chat_id, {})
+    if "requireMention" in entry:
+        return bool(entry["requireMention"])
+    return bool(default_value)
+
+
+def set_line_group_require_mention(chat_id: str, enabled: bool) -> None:
+    data = load_line_group_settings()
+    data["groups"].setdefault(chat_id, {})
+    data["groups"][chat_id]["requireMention"] = bool(enabled)
+    data["groups"][chat_id]["updatedAt"] = utcnow()
+    save_line_group_settings(data)
 
 
 def init_db(conn: sqlite3.Connection) -> None:

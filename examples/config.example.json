@@ -18,5 +18,7 @@
   "watch_interval_sec": 20,
   "alarm_channel": "",
   "discord_bot_token": "",
-  "line_dm_policy": "pairing"
+  "line_dm_policy": "pairing",
+  "line_group_policy": "pairing",
+  "line_group_require_mention_default": true
 }

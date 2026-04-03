@@ -12,7 +12,9 @@ from common import (
     connect_db,
     detect_kind_from_path,
     ensure_binding,
+    get_line_group_require_mention,
     init_db,
+    is_line_group_allowed,
     is_line_user_allowed,
     line_binary_request,
     line_request,
@@ -20,6 +22,7 @@ from common import (
     log_event,
     new_id,
     parse_line_source,
+    queue_line_group_pairing_request,
     queue_line_pairing_request,
     register_artifact,
     session_key_for,
@@ -82,6 +85,24 @@ class Handler(BaseHTTPRequestHandler):
                     f"text: {preview}\n"
                     f"count: {req.get('requestCount', 1)}"
                 )
+                continue
+            if chat_type in {"group", "room"} and CONFIG.get("line_group_policy") == "pairing" and not is_line_group_allowed(chat_id):
+                preview = str(message.get("text") or f"[{message.get('type', 'message')}]")
+                req = queue_line_group_pairing_request(chat_type, chat_id, user_id, preview)
+                self.reply_unauthorized(event.get("replyToken"), chat_id, group_mode=True)
+                from common import alert
+                alert(
+                    "new LINE group pairing request\n"
+                    f"chat_type: {chat_type}\n"
+                    f"chat_id: {chat_id}\n"
+                    f"user_id: {user_id}\n"
+                    f"text: {preview}\n"
+                    f"count: {req.get('requestCount', 1)}"
+                )
+                continue
+            if chat_type in {"group", "room"} and get_line_group_require_mention(
+                chat_id, bool(CONFIG.get("line_group_require_mention_default", True))
+            ) and not self.is_bot_mentioned(message):
                 continue
             session_key = session_key_for(chat_type, chat_id)
             binding = ensure_binding(CONN, session_key, chat_type, chat_id, CONFIG)
@@ -196,8 +217,9 @@ class Handler(BaseHTTPRequestHandler):
         register_artifact(CONN, msg_id, None, str(temp_path), kind=kind, mime_type=content_type.split(";")[0].strip())
         log_event(CONN, msg_id, "artifact", "webhook", f"downloaded inbound {kind}: {filename}")
 
-    def reply_unauthorized(self, reply_token: str | None, chat_id: str) -> None:
-        payload = {"messages": [{"type": "text", "text": CONFIG["unauthorized_reply_text"][:5000]}]}
+    def reply_unauthorized(self, reply_token: str | None, chat_id: str, group_mode: bool = False) -> None:
+        text = CONFIG["unauthorized_group_reply_text"] if group_mode else CONFIG["unauthorized_reply_text"]
+        payload = {"messages": [{"type": "text", "text": text[:5000]}]}
         if reply_token:
             payload["replyToken"] = reply_token
             status, data = line_request(CONFIG, "/v2/bot/message/reply", payload)
@@ -206,8 +228,15 @@ class Handler(BaseHTTPRequestHandler):
         line_request(
             CONFIG,
             "/v2/bot/message/push",
-            {"to": chat_id, "messages": [{"type": "text", "text": CONFIG["unauthorized_reply_text"][:5000]}]},
+            {"to": chat_id, "messages": [{"type": "text", "text": text[:5000]}]},
         )
+
+    def is_bot_mentioned(self, message: dict[str, object]) -> bool:
+        mention = message.get("mention") or {}
+        mentionees = mention.get("mentionees") or []
+        if not isinstance(mentionees, list):
+            return False
+        return any(bool(item.get("isSelf")) for item in mentionees if isinstance(item, dict))
 
 
 def main() -> int:

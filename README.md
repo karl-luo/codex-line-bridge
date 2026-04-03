@@ -1,6 +1,6 @@
 # Codex LINE Bridge
 
-Version: `1.0.1`
+Version: `1.0.2`
 
 Standalone LINE bridge for Codex with its own webhook, queue, session bindings, sender, watcher, pairing allowlist, media handling, and Discord alerts.
 
@@ -17,6 +17,11 @@ Standalone LINE bridge for Codex with its own webhook, queue, session bindings, 
   - pending requests
   - allowlist approvals
   - auto-reject for unauthorized users
+- Group approval and mention controls:
+  - pending group requests
+  - group allowlist approvals
+  - per-group `requireMention` override
+  - default group mode requires bot mention
 - Rich media support:
   - inbound images
   - inbound files
@@ -31,6 +36,9 @@ Standalone LINE bridge for Codex with its own webhook, queue, session bindings, 
 - `examples/config.example.json`: sanitized config template
 - `examples/line-allowFrom.example.json`: empty allowlist template
 - `examples/line-pairing.example.json`: empty pairing queue template
+- `examples/line-allowGroups.example.json`: empty group allowlist template
+- `examples/line-group-pairing.example.json`: empty group approval queue template
+- `examples/line-group-settings.example.json`: empty per-group settings template
 
 ## Quick start
 
@@ -43,6 +51,9 @@ Standalone LINE bridge for Codex with its own webhook, queue, session bindings, 
 3. Create local auth state files from the examples:
    - `data/line-allowFrom.json`
    - `data/line-pairing.json`
+   - `data/line-allowGroups.json`
+   - `data/line-group-pairing.json`
+   - `data/line-group-settings.json`
 4. Install requirements:
 
 ```bash
@@ -62,6 +73,8 @@ python3 scripts/watcher.py
 
 - This repository intentionally excludes real secrets, API keys, runtime databases, logs, and media artifacts.
 - LINE cannot natively send arbitrary PDF attachments the same way Discord can. The current sender delivers PDFs as public download links.
+- New direct chats still require approval when `line_dm_policy` is `pairing`.
+- New groups and rooms can also require approval, and approved groups default to mention-only handling unless overridden.
 
 ## License
 

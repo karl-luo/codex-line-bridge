@@ -8,7 +8,20 @@ import sqlite3
 import subprocess
 from typing import Iterable
 
-from common import DB_PATH, approve_line_user, load_line_allow_from, load_line_pairing, reject_line_user
+from common import (
+    DB_PATH,
+    approve_line_group,
+    approve_line_user,
+    get_line_group_require_mention,
+    load_line_allow_from,
+    load_line_allow_groups,
+    load_line_group_pairing,
+    load_line_group_settings,
+    load_line_pairing,
+    reject_line_group,
+    reject_line_user,
+    set_line_group_require_mention,
+)
 
 
 LABELS = [
@@ -113,7 +126,15 @@ def rotate_session(message_id: str) -> int:
 def pairings() -> int:
     data = load_line_pairing()
     allow = load_line_allow_from()
-    print(json.dumps({"pending_requests": data.get("requests", []), "allow_from": allow.get("allowFrom", [])}, ensure_ascii=False, indent=2))
+    group_data = load_line_group_pairing()
+    allow_groups = load_line_allow_groups()
+    print(json.dumps({
+        "pending_requests": data.get("requests", []),
+        "allow_from": allow.get("allowFrom", []),
+        "pending_groups": group_data.get("requests", []),
+        "allow_groups": allow_groups.get("allowGroups", []),
+        "group_settings": load_line_group_settings().get("groups", {}),
+    }, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -126,6 +147,27 @@ def approve_user(user_id: str) -> int:
 def reject_user(user_id: str) -> int:
     reject_line_user(user_id)
     print(json.dumps({"rejected": user_id}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def approve_group(chat_id: str) -> int:
+    approve_line_group(chat_id)
+    print(json.dumps({"approved_group": chat_id}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def reject_group(chat_id: str) -> int:
+    reject_line_group(chat_id)
+    print(json.dumps({"rejected_group": chat_id}, ensure_ascii=False, indent=2))
+    return 0
+
+
+def set_group_require_mention(chat_id: str, enabled: bool) -> int:
+    set_line_group_require_mention(chat_id, enabled)
+    print(json.dumps({
+        "chat_id": chat_id,
+        "require_mention": get_line_group_require_mention(chat_id, True),
+    }, ensure_ascii=False, indent=2))
     return 0
 
 
@@ -146,6 +188,13 @@ def main() -> int:
     p_approve.add_argument("user_id")
     p_reject = sub.add_parser("reject-user")
     p_reject.add_argument("user_id")
+    p_approve_group = sub.add_parser("approve-group")
+    p_approve_group.add_argument("chat_id")
+    p_reject_group = sub.add_parser("reject-group")
+    p_reject_group.add_argument("chat_id")
+    p_group_mention = sub.add_parser("set-group-require-mention")
+    p_group_mention.add_argument("chat_id")
+    p_group_mention.add_argument("mode", choices=["on", "off"])
     args = parser.parse_args()
 
     if args.cmd == "status":
@@ -166,6 +215,12 @@ def main() -> int:
         return approve_user(args.user_id)
     if args.cmd == "reject-user":
         return reject_user(args.user_id)
+    if args.cmd == "approve-group":
+        return approve_group(args.chat_id)
+    if args.cmd == "reject-group":
+        return reject_group(args.chat_id)
+    if args.cmd == "set-group-require-mention":
+        return set_group_require_mention(args.chat_id, args.mode == "on")
     return 1
 
 
